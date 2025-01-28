@@ -35,6 +35,9 @@ jobs:
           # Pythonライブラリをインストール
           pip3 install requests beautifulsoup4
 
+          # yt-dlp をインストール
+          sudo apt-get install -y yt-dlp
+
       - name: Run Login Script
         run: |
           python3 login.py "${{ github.event.inputs.email }}" "${{ github.event.inputs.password }}"
