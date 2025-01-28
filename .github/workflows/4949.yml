@@ -1,4 +1,4 @@
-name: Fetch NicoNico Comments and Download Video
+name: Fetch NicoNico Comments and Upload Video
 
 on:
   workflow_dispatch:
@@ -8,18 +8,25 @@ on:
         required: true
 
 jobs:
-  fetch_and_download:
+  fetch_and_upload:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Dependencies
         run: |
+          # 必要なツールをインストール
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip curl ffmpeg fonts-migmix jq
+          
+          # Pythonライブラリをインストール
           pip3 install requests
+
+          # yt-dlp をインストール
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
 
@@ -27,16 +34,7 @@ jobs:
         run: |
           video_id="${{ github.event.inputs.video_id }}"
           mkdir -p downloads
-
-          # スクリプトの存在を確認
-          script_path="$GITHUB_WORKSPACE/scripts/fetch_comments.py"
-          if [ ! -f "$script_path" ]; then
-            echo "Error: $script_path not found"
-            exit 1
-          fi
-
-          # スクリプトを実行
-          python3 "$script_path" "$video_id"
+          python3 scripts/fetch_comments.py "$video_id"
 
       - name: Download Video
         run: |
@@ -50,6 +48,7 @@ jobs:
           ass_file="downloads/${video_id}_comments.ass"
           font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
 
+          # ASSファイルのヘッダーを作成
           echo "[Script Info]" > "$ass_file"
           echo "Title: NicoNico Comments" >> "$ass_file"
           echo "ScriptType: v4.00+" >> "$ass_file"
@@ -60,11 +59,12 @@ jobs:
           echo "" >> "$ass_file"
           echo "[Events]" >> "$ass_file"
 
+          # コメントを読み込んでASSファイルに追加
           while read -r line; do
             time=$(echo "$line" | awk '{print $1}')
             comment=$(echo "$line" | cut -f2-)
-            start_time=$(date -d@$time +%H:%M:%S)
-            end_time=$(date -d@$(( $(date -d"$time" +%s) + 4 )) -u +%H:%M:%S)
+            start_time=$(date -d@"$time" +%H:%M:%S)
+            end_time=$(date -d@$(( $(date -d@"$time" +%s) + 4 )) -u +%H:%M:%S)
             echo "Dialogue: 0,$start_time,$end_time,Default,,0,0,0,,{\move(1280,0,-200,0)}$comment" >> "$ass_file"
           done < "$comments_file"
 
@@ -72,3 +72,20 @@ jobs:
         run: |
           video_id="${{ github.event.inputs.video_id }}"
           ffmpeg -i "downloads/${video_id}.mp4" -vf "ass=downloads/${video_id}_comments.ass" -c:v libx264 -c:a copy "downloads/${video_id}_with_comments.mp4"
+
+      - name: Commit and Push Completed Video
+        run: |
+          video_id="${{ github.event.inputs.video_id }}"
+          completed_video="downloads/${video_id}_with_comments.mp4"
+
+          # 完成した動画をリポジトリに移動
+          mv "$completed_video" .
+
+          # Gitの設定
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 完成動画をステージングしてコミット＆プッシュ
+          git add "${video_id}_with_comments.mp4"
+          git commit -m "Add completed video: ${video_id}_with_comments.mp4"
+          git push origin HEAD
