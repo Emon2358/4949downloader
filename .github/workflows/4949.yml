@@ -37,7 +37,7 @@ jobs:
         id: download_comments
         run: |
           video_id="${{ github.event.inputs.video_id }}"
-          python3 <<EOF
+          python3 - <<EOF
 import json
 import re
 import requests
@@ -86,7 +86,7 @@ EOF
           output_path="downloads/${{ github.event.inputs.video_id }}_with_comments.mp4"
           font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
           
-          python3 <<EOF
+          python3 - <<EOF
 import json
 import subprocess
 
