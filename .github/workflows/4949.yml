@@ -17,25 +17,26 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # 必要なツールをインストール
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip curl ffmpeg fonts-migmix jq
-          
-          # Pythonライブラリをインストール
           pip3 install requests
-
-          # yt-dlp をインストール
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
 
       - name: Fetch Comments
         run: |
-          # GitHub Actions の inputs から動画IDを取得
           video_id="${{ github.event.inputs.video_id }}"
           mkdir -p downloads
 
-          # 正しいパスでPythonスクリプトを実行
-          python3 scripts/fetch_comments.py "$video_id"
+          # スクリプトの存在を確認
+          script_path="$GITHUB_WORKSPACE/scripts/fetch_comments.py"
+          if [ ! -f "$script_path" ]; then
+            echo "Error: $script_path not found"
+            exit 1
+          fi
+
+          # スクリプトを実行
+          python3 "$script_path" "$video_id"
 
       - name: Download Video
         run: |
@@ -49,7 +50,6 @@ jobs:
           ass_file="downloads/${video_id}_comments.ass"
           font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
 
-          # ASSファイルのヘッダーを作成
           echo "[Script Info]" > "$ass_file"
           echo "Title: NicoNico Comments" >> "$ass_file"
           echo "ScriptType: v4.00+" >> "$ass_file"
@@ -60,7 +60,6 @@ jobs:
           echo "" >> "$ass_file"
           echo "[Events]" >> "$ass_file"
 
-          # コメントを読み込んでASSファイルに追加
           while read -r line; do
             time=$(echo "$line" | awk '{print $1}')
             comment=$(echo "$line" | cut -f2-)
