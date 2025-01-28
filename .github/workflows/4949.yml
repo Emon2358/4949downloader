@@ -8,7 +8,7 @@ on:
         required: true
 
 jobs:
-  download_video:
+  download_video_with_comments:
     runs-on: ubuntu-latest
 
     steps:
@@ -36,7 +36,7 @@ jobs:
         id: download_comments
         run: |
           video_id="${{ github.event.inputs.video_id }}"
-          # Download HTML page of the video
+          # Fetch HTML page of the video
           html=$(curl -s "https://www.nicovideo.jp/watch/${video_id}")
           
           # Extract threadId and threadKey using regex
@@ -68,19 +68,15 @@ EOF
           # Save comments data to JSON file
           echo "$response" > "downloads/${video_id}_comments.json"
 
-      - name: Overlay Comments on Video
-        id: overlay_comments
+      - name: Generate ASS Subtitle for NicoNico Style Comments
+        id: generate_ass
         run: |
-          video_path="downloads/${{ github.event.inputs.video_id }}.mp4"
-          comments_path="downloads/${{ github.event.inputs.video_id }}_comments.json"
-          output_path="downloads/${{ github.event.inputs.video_id }}_with_comments.mp4"
-          font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
-          
-          # Load comments data from JSON
-          comments_data=$(cat "$comments_path")
-
-          # Generate ASS subtitle file
+          video_id="${{ github.event.inputs.video_id }}"
+          comments_path="downloads/${video_id}_comments.json"
           ass_file="downloads/comments.ass"
+          font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
+
+          # Create ASS subtitle header
           echo "[Script Info]" > "$ass_file"
           echo "Title: NicoNico Comments" >> "$ass_file"
           echo "ScriptType: v4.00+" >> "$ass_file"
@@ -89,28 +85,32 @@ EOF
           echo "" >> "$ass_file"
           echo "[V4+ Styles]" >> "$ass_file"
           echo "Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding" >> "$ass_file"
-          echo "Style: Default,$font_path,20,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,1,1,2,10,10,10,1" >> "$ass_file"
+          echo "Style: Default,Migu 1P,24,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,1,1,2,10,10,10,1" >> "$ass_file"
           echo "" >> "$ass_file"
           echo "[Events]" >> "$ass_file"
           echo "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text" >> "$ass_file"
 
-          # Write comments to ASS file
-          for thread in $(echo "$comments_data" | jq -r '.data.threads[] | @base64'); do
-            comments=$(echo "$thread" | base64 --decode | jq -r '.comments')
-            for comment in $(echo "$comments" | jq -r '.[] | @base64'); do
-              vpos=$(echo "$comment" | base64 --decode | jq -r '.vposMs')
-              body=$(echo "$comment" | base64 --decode | jq -r '.body')
+          # Add comments to ASS file
+          jq -r '.data.threads[] | .comments[] | @base64' "$comments_path" | while read comment; do
+            decoded=$(echo "$comment" | base64 --decode)
+            vpos=$(echo "$decoded" | jq -r '.vposMs')
+            body=$(echo "$decoded" | jq -r '.body')
 
-              # Convert vposMs to timestamp (minutes:seconds)
-              minutes=$((vpos / 60000))
-              seconds=$(((vpos / 1000) % 60))
-              start_time="0:${minutes}:${seconds}.00"
-              end_time="0:${minutes}:${seconds + 5}.00"  # Display for 5 seconds
+            # Convert vposMs to timestamp
+            start_time=$(printf "0:%02d:%02d.%02d" $((vpos / 60000)) $(((vpos / 1000) % 60)) $(((vpos % 1000) / 10)))
+            end_time=$(printf "0:%02d:%02d.%02d" $((vpos / 60000)) $((((vpos + 4000) / 1000) % 60)) $((((vpos + 4000) % 1000) / 10)))
 
-              # Write to ASS file
-              echo "Dialogue: 0,$start_time,$end_time,Default,,0,0,0,,${body}" >> "$ass_file"
-            done
+            # Generate moving comments (right to left)
+            echo "Dialogue: 0,$start_time,$end_time,Default,,0,0,0,,{\move(1280,0,-200,0)}$body" >> "$ass_file"
           done
+
+      - name: Overlay Comments on Video
+        id: overlay_comments
+        run: |
+          video_id="${{ github.event.inputs.video_id }}"
+          video_path="downloads/${video_id}.mp4"
+          ass_file="downloads/comments.ass"
+          output_path="downloads/${video_id}_with_comments.mp4"
 
           # Overlay comments on video using FFmpeg
           ffmpeg -i "$video_path" -vf "ass=$ass_file" -c:v libx264 -crf 23 -preset veryfast -c:a copy "$output_path"
