@@ -1,4 +1,3 @@
-# login.py
 import requests
 
 LOGIN_URL = "https://account.nicovideo.jp/api/v1/login"
@@ -6,7 +5,6 @@ SETTINGS_URL = "https://www.nicovideo.jp/api/v1/user.settings.update"
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 }
-
 
 def save_cookies_to_netscape_format(cookies, filename):
     """Cookies を Netscape フォーマットで保存"""
@@ -26,7 +24,7 @@ def save_cookies_to_netscape_format(cookies, filename):
     print(f"Cookies saved in Netscape format to {filename}")
 
 
-def login_and_set_preferences(email, password):
+def login(email, password):
     session = requests.Session()
 
     # ログインリクエスト
@@ -39,24 +37,35 @@ def login_and_set_preferences(email, password):
     if response.status_code == 200 and "nicosid" in session.cookies:
         print("Login successful")
 
-        # 卑猥な動画（R-18）を表示する設定を有効化
-        settings_payload = {
-            "r18_enabled": "true"  # 設定変更: R-18動画を有効化
-        }
-        settings_response = session.post(SETTINGS_URL, headers=HEADERS, data=settings_payload, cookies=session.cookies)
+        # R-18コンテンツを有効化
+        enable_r18_content(session)
 
-        if settings_response.status_code == 200:
-            print("Account settings updated: R-18 videos enabled")
-
-        # クッキーを Netscape フォーマットで保存
+        # クッキーを保存
         save_cookies_to_netscape_format(session.cookies, "cookies.txt")
     else:
-        print("Login failed")
+        print(f"Login failed: {response.status_code} {response.text}")
+        exit(1)
+
+
+def enable_r18_content(session):
+    """アカウントでR-18コンテンツを有効化する"""
+    settings_payload = {
+        "r18_enabled": "true"  # R-18コンテンツを表示する設定
+    }
+    response = session.post(SETTINGS_URL, headers=HEADERS, data=settings_payload, cookies=session.cookies)
+
+    if response.status_code == 200:
+        print("R-18 content enabled in account settings")
+    else:
+        print(f"Failed to enable R-18 content: {response.status_code} {response.text}")
         exit(1)
 
 
 if __name__ == "__main__":
     import sys
+    if len(sys.argv) != 3:
+        print("Usage: python3 login.py <email> <password>")
+        exit(1)
     email = sys.argv[1]
     password = sys.argv[2]
-    login_and_set_preferences(email, password)
+    login(email, password)
