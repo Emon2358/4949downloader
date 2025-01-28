@@ -8,7 +8,7 @@ on:
         required: true
 
 jobs:
-  download_video_with_comments:
+  process_video:
     runs-on: ubuntu-latest
 
     steps:
@@ -18,61 +18,21 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl ffmpeg fonts-migmix jq
+          sudo apt-get install -y python3 python3-pip curl ffmpeg fonts-migmix jq
+          pip3 install requests beautifulsoup4
 
-      - name: Download NicoNico Video
-        id: download_video
+      - name: Run cm.py to fetch comments
+        id: fetch_comments
         run: |
+          video_id="${{ github.event.inputs.video_id }}"
           mkdir -p downloads
-          video_id="${{ github.event.inputs.video_id }}"
-          
-          # Download video and audio merged into one file
-          yt-dlp "https://www.nicovideo.jp/watch/${video_id}" \
-            --cookies cookies.txt \
-            -o "downloads/${video_id}.mp4" \
-            --merge-output-format mp4
-
-      - name: Download Comments
-        id: download_comments
-        run: |
-          video_id="${{ github.event.inputs.video_id }}"
-          # Fetch HTML page of the video
-          html=$(curl -s "https://www.nicovideo.jp/watch/${video_id}")
-          
-          # Extract threadId and threadKey using regex
-          thread_id=$(echo "$html" | grep -oP 'threadIds":\[\{"id":\K[0-9]+(?=,)')
-          thread_key=$(echo "$html" | grep -oP '"threadKey":"\K(eyJ0eXAiOiJKV1Qi.*?)(?=")')
-          
-          # Create request payload for comment API
-          request_payload=$(cat <<EOF
-{
-  "params": {
-    "targets": [
-      { "id": $thread_id, "fork": "owner" },
-      { "id": $thread_id, "fork": "main" },
-      { "id": $thread_id, "fork": "easy" }
-    ],
-    "language": "ja-jp"
-  },
-  "threadKey": "$thread_key",
-  "additionals": {}
-}
-EOF
-)
-
-          # Get comments from the API
-          response=$(curl -s -X POST -H "x-frontend-id: 6" -H "Content-Type: application/json" \
-            -d "$request_payload" \
-            "https://public.nvcomment.nicovideo.jp/v1/threads")
-          
-          # Save comments data to JSON file
-          echo "$response" > "downloads/${video_id}_comments.json"
+          python3 scripts/cm.py "$video_id" > "downloads/${video_id}_comments.txt"
 
       - name: Generate ASS Subtitle for NicoNico Style Comments
         id: generate_ass
         run: |
           video_id="${{ github.event.inputs.video_id }}"
-          comments_path="downloads/${video_id}_comments.json"
+          comments_txt="downloads/${video_id}_comments.txt"
           ass_file="downloads/comments.ass"
           font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
 
@@ -91,18 +51,25 @@ EOF
           echo "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text" >> "$ass_file"
 
           # Add comments to ASS file
-          jq -r '.data.threads[] | .comments[] | @base64' "$comments_path" | while read comment; do
-            decoded=$(echo "$comment" | base64 --decode)
-            vpos=$(echo "$decoded" | jq -r '.vposMs')
-            body=$(echo "$decoded" | jq -r '.body')
-
-            # Convert vposMs to timestamp
-            start_time=$(printf "0:%02d:%02d.%02d" $((vpos / 60000)) $(((vpos / 1000) % 60)) $(((vpos % 1000) / 10)))
-            end_time=$(printf "0:%02d:%02d.%02d" $((vpos / 60000)) $((((vpos + 4000) / 1000) % 60)) $((((vpos + 4000) % 1000) / 10)))
+          while read -r line; do
+            # Extract time and comment from each line in the txt file
+            time=$(echo "$line" | awk '{print $1}')
+            comment=$(echo "$line" | cut -f2-)
 
             # Generate moving comments (right to left)
-            echo "Dialogue: 0,$start_time,$end_time,Default,,0,0,0,,{\move(1280,0,-200,0)}$body" >> "$ass_file"
-          done
+            start_time=$time
+            end_time=$(date -d@$(( $(date -d"$time" +%s) + 4 )) -u +%H:%M:%S)
+            echo "Dialogue: 0,$start_time,$end_time,Default,,0,0,0,,{\move(1280,0,-200,0)}$comment" >> "$ass_file"
+          done < "$comments_txt"
+
+      - name: Download NicoNico Video
+        id: download_video
+        run: |
+          video_id="${{ github.event.inputs.video_id }}"
+          yt-dlp "https://www.nicovideo.jp/watch/${video_id}" \
+            --cookies cookies.txt \
+            -o "downloads/${video_id}.mp4" \
+            --merge-output-format mp4
 
       - name: Overlay Comments on Video
         id: overlay_comments
