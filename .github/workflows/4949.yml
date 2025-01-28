@@ -1,4 +1,4 @@
-name: Download NicoNico Video
+name: Download NicoNico Video with Styled Comments
 
 on:
   workflow_dispatch:
@@ -18,8 +18,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-pip
-          pip3 install yt-dlp
+          sudo apt-get install -y python3-pip ffmpeg fonts-migmix
+          pip3 install yt-dlp niconicomments
 
       - name: Retrieve cookies
         run: |
@@ -30,7 +30,34 @@ jobs:
         run: |
           mkdir -p downloads
           video_id="${{ github.event.inputs.video_id }}"
-          yt-dlp "https://www.nicovideo.jp/watch/${video_id}" --cookies cookies.txt -o "downloads/%(title)s.%(ext)s"
+          
+          # Download video and audio merged in one file
+          yt-dlp "https://www.nicovideo.jp/watch/${video_id}" \
+            --cookies cookies.txt \
+            -o "downloads/video.%(ext)s" \
+            --merge-output-format mp4
+
+      - name: Download Comments
+        id: comments
+        run: |
+          video_id="${{ github.event.inputs.video_id }}"
+          # Download comments as an XML file
+          niconicomments download \
+            --video-id "$video_id" \
+            --cookies cookies.txt \
+            -o "downloads/comments.xml"
+
+      - name: Overlay Comments with Style
+        id: overlay
+        run: |
+          video_path=$(ls downloads/video.*)
+          font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
+          
+          # Overlay comments with font and color styling
+          ffmpeg -i "$video_path" -vf \
+            "niconicomments=downloads/comments.xml:fontfile=${font_path}:fontsize=20" \
+            -c:v libx264 -crf 23 -preset veryfast \
+            -c:a copy "downloads/${{ github.event.inputs.video_id }}_with_comments.mp4"
 
       - name: Add success message to README.md
         run: |
@@ -41,10 +68,13 @@ jobs:
           fi
           echo "✅ 成功したじょ〜☆彡: ${{ github.event.inputs.video_id }}" >> README.md
 
-      - name: Commit changes
+      - name: Commit changes and upload video
+        env:
+          PAT: ${{ secrets.PAT }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${PAT}@github.com/${{ github.repository }}
           git add README.md downloads/
           git commit -m "Add success message and video for ${{ github.event.inputs.video_id }}"
-          git push
+          git push origin main
