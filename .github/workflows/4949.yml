@@ -35,7 +35,7 @@ jobs:
           mkdir -p downloads
 
           # 正しいパスでPythonスクリプトを実行
-          python3 ./scripts/fetch_comments.py "$video_id"
+          python3 scripts/fetch_comments.py "$video_id"
 
       - name: Download Video
         run: |
