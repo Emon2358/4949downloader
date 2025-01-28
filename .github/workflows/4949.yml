@@ -1,10 +1,10 @@
-name: Download NicoNico Video with Styled Comments
+name: Download NicoNico Video with Comments
 
 on:
   workflow_dispatch:
     inputs:
       video_id:
-        description: 'NicoNico Video ID (e.g., sm1536)'
+        description: 'NicoNico Video ID (e.g., sm9)'
         required: true
 
 jobs:
@@ -19,47 +19,121 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y python3-pip ffmpeg fonts-migmix
-          pip3 install yt-dlp niconicomments
-
-      - name: Retrieve cookies
-        run: |
-          curl -c cookies.txt https://www.nicovideo.jp/
+          pip3 install yt-dlp beautifulsoup4 requests
 
       - name: Download NicoNico Video
-        id: download
+        id: download_video
         run: |
           mkdir -p downloads
           video_id="${{ github.event.inputs.video_id }}"
           
-          # Download video and audio merged in one file
+          # Download video and audio merged into one file
           yt-dlp "https://www.nicovideo.jp/watch/${video_id}" \
             --cookies cookies.txt \
-            -o "downloads/video.%(ext)s" \
+            -o "downloads/${video_id}.mp4" \
             --merge-output-format mp4
 
       - name: Download Comments
-        id: comments
+        id: download_comments
         run: |
           video_id="${{ github.event.inputs.video_id }}"
-          # Download comments as an XML file
-          niconicomments download \
-            --video-id "$video_id" \
-            --cookies cookies.txt \
-            -o "downloads/comments.xml"
+          python3 <<EOF
+import json
+import re
+import requests
+from bs4 import BeautifulSoup
 
-      - name: Overlay Comments with Style
-        id: overlay
+video_id = "${video_id}"
+url = f"https://www.nicovideo.jp/watch/{video_id}"
+source = requests.get(f"https://nicovideo.jp/watch/{video_id}")
+soup = BeautifulSoup(source.text, "html.parser")
+soup = str(soup)
+
+# Extract threadId and threadKey
+threadIdRegex = r'threadIds":\[\{"id":(.*?),"'
+threadKeyRegex = r'"threadKey":"(eyJ0eXAiOiJKV1Qi.*?)"'
+
+threadId = re.findall(threadIdRegex, soup)[0]
+threadKey = re.findall(threadKeyRegex, soup)[0]
+
+# Comment API request
+headers = {"x-frontend-id": "6"}
+params = {
+    "params": {
+        "targets":[
+            {"id": threadId, "fork": "owner"},  # 投稿者コメント
+            {"id": threadId, "fork": "main"},   # 通常コメント
+            {"id": threadId, "fork": "easy"}    # かんたんコメント
+        ],
+        "language": "ja-jp"
+    },
+    "threadKey": threadKey,
+    "additionals": {},
+}
+endpoint = "https://public.nvcomment.nicovideo.jp/v1/threads"
+res = requests.post(endpoint, json.dumps(params), headers=headers).json()
+
+# Save comments to file
+with open(f"downloads/{video_id}_comments.json", "w", encoding="utf-8") as f:
+    json.dump(res, f, ensure_ascii=False, indent=2)
+EOF
+
+      - name: Overlay Comments on Video
+        id: overlay_comments
         run: |
-          video_path=$(ls downloads/video.*)
+          video_path="downloads/${{ github.event.inputs.video_id }}.mp4"
+          comments_path="downloads/${{ github.event.inputs.video_id }}_comments.json"
+          output_path="downloads/${{ github.event.inputs.video_id }}_with_comments.mp4"
           font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
           
-          # Overlay comments with font and color styling
-          ffmpeg -i "$video_path" -vf \
-            "niconicomments=downloads/comments.xml:fontfile=${font_path}:fontsize=20" \
-            -c:v libx264 -crf 23 -preset veryfast \
-            -c:a copy "downloads/${{ github.event.inputs.video_id }}_with_comments.mp4"
+          python3 <<EOF
+import json
+import subprocess
 
-      - name: Add success message to README.md
+video_path = "${video_path}"
+comments_path = "${comments_path}"
+output_path = "${output_path}"
+font_path = "${font_path}"
+
+# Load comments data
+with open(comments_path, "r", encoding="utf-8") as f:
+    comments_data = json.load(f)
+
+# Generate ASS subtitle file
+ass_file = "downloads/comments.ass"
+with open(ass_file, "w", encoding="utf-8") as f:
+    f.write("[Script Info]\n")
+    f.write("Title: NicoNico Comments\n")
+    f.write("ScriptType: v4.00+\n")
+    f.write("Collisions: Normal\n")
+    f.write("PlayDepth: 0\n")
+    f.write("\n[V4+ Styles]\n")
+    f.write("Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
+    f.write("Style: Default,{font_path},20,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,1,1,2,10,10,10,1\n")
+    f.write("\n[Events]\n")
+    f.write("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
+    
+    # Write comments to ASS file
+    for thread in comments_data["data"]["threads"]:
+        for comment in sorted(thread["comments"], key=lambda x: x["vposMs"]):
+            minutes = comment["vposMs"] // (1000 * 60)
+            seconds = (comment["vposMs"] // 1000) % 60
+            start_time = f"0:{minutes:02}:{seconds:02}.00"
+            end_time = f"0:{minutes:02}:{seconds + 5:02}.00"  # Display for 5 seconds
+            text = comment["body"].replace(",", "\,")  # Escape commas
+            f.write(f"Dialogue: 0,{start_time},{end_time},Default,,0,0,0,,{text}\n")
+
+# Overlay comments on video using FFmpeg
+subprocess.run([
+    "ffmpeg", "-i", video_path, "-vf", f"ass={ass_file}",
+    "-c:v", "libx264", "-crf", "23", "-preset", "veryfast",
+    "-c:a", "copy", output_path
+])
+EOF
+
+      - name: Upload Video and Update README
+        env:
+          PAT: ${{ secrets.PAT }}
         run: |
           if [ ! -f README.md ]; then
             echo "# NicoNico Video Downloads" > README.md
@@ -67,14 +141,8 @@ jobs:
             echo "" >> README.md
           fi
           echo "✅ 成功したじょ〜☆彡: ${{ github.event.inputs.video_id }}" >> README.md
-
-      - name: Commit changes and upload video
-        env:
-          PAT: ${{ secrets.PAT }}
-        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin https://x-access-token:${PAT}@github.com/${{ github.repository }}
           git add README.md downloads/
-          git commit -m "Add success message and video for ${{ github.event.inputs.video_id }}"
-          git push origin main
+          git commit -m "Add video and comments for ${{ github.event.inputs.video_id }}"
+          git push
