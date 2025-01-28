@@ -1,4 +1,4 @@
-import sys
+ import sys
 import requests
 from bs4 import BeautifulSoup
 
@@ -12,8 +12,16 @@ session = requests.Session()
 try:
     # ログインページへアクセスして CSRF トークンを取得
     login_page = session.get("https://account.nicovideo.jp/login")
+    if login_page.status_code != 200:
+        raise Exception(f"ログインページの取得に失敗しました: {login_page.status_code}")
+    
     soup = BeautifulSoup(login_page.text, 'html.parser')
-    csrf_token = soup.find("input", {"name": "csrf_token"}).get("value")
+    csrf_token_input = soup.find("input", {"name": "csrf_token"})
+    
+    if not csrf_token_input:
+        raise Exception("CSRF トークンが見つかりませんでした")
+    
+    csrf_token = csrf_token_input.get("value")
 
     # ログインリクエストを送信
     login_data = {
