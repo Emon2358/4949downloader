@@ -27,7 +27,9 @@ jobs:
           
           # Deno をインストール
           curl -fsSL https://deno.land/x/install/install.sh | sh
-          echo "export PATH=$HOME/.deno/bin:\$PATH" >> $GITHUB_ENV
+          export PATH="$HOME/.deno/bin:$PATH"
+          echo "PATH=$HOME/.deno/bin:\$PATH" >> $GITHUB_ENV
+          deno --version
 
       - name: Fetch Comments
         run: |
