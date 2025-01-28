@@ -34,8 +34,8 @@ jobs:
           video_id="${{ github.event.inputs.video_id }}"
           mkdir -p downloads
 
-          # Pythonスクリプトでコメントを取得
-          python3 scripts/fetch_comments.py "$video_id"
+          # 正しいパスでPythonスクリプトを実行
+          python3 ./scripts/fetch_comments.py "$video_id"
 
       - name: Download Video
         run: |
