@@ -37,7 +37,7 @@ jobs:
         id: download_comments
         run: |
           video_id="${{ github.event.inputs.video_id }}"
-          python3 - <<EOF
+          python3 <<EOF
 import json
 import re
 import requests
@@ -45,7 +45,7 @@ from bs4 import BeautifulSoup
 
 video_id = "${video_id}"
 url = f"https://www.nicovideo.jp/watch/{video_id}"
-source = requests.get(f"https://nicovideo.jp/watch/{video_id}")
+source = requests.get(url)
 soup = BeautifulSoup(source.text, "html.parser")
 soup = str(soup)
 
@@ -86,7 +86,7 @@ EOF
           output_path="downloads/${{ github.event.inputs.video_id }}_with_comments.mp4"
           font_path="/usr/share/fonts/opentype/migmix/migmix-1p-regular.ttf"
           
-          python3 - <<EOF
+          python3 <<EOF
 import json
 import subprocess
 
@@ -109,7 +109,7 @@ with open(ass_file, "w", encoding="utf-8") as f:
     f.write("PlayDepth: 0\n")
     f.write("\n[V4+ Styles]\n")
     f.write("Format: Name, Fontname, Fontsize, PrimaryColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n")
-    f.write("Style: Default,{font_path},20,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,1,1,2,10,10,10,1\n")
+    f.write(f"Style: Default,{font_path},20,&H00FFFFFF,&H00000000,0,0,0,0,100,100,0,0,1,1,1,2,10,10,10,1\n")
     f.write("\n[Events]\n")
     f.write("Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n")
     
