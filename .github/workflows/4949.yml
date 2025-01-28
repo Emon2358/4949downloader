@@ -1,4 +1,4 @@
-name: Fetch NicoNico Comments and Download Video
+name: shikushiku downloader
 
 on:
   workflow_dispatch:
