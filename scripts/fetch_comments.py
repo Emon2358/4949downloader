@@ -1,6 +1,7 @@
 import re
 import requests
 import sys
+import os
 
 class ThreadIdFetchError(Exception):
     pass
@@ -53,13 +54,21 @@ def fetch_comments(video_id: str, output_file: str):
 
     comments = thread_response.json()
 
+    # 出力先ディレクトリを作成（存在しない場合）
+    os.makedirs(os.path.dirname(output_file), exist_ok=True)
+
     # コメントをファイルに保存
     with open(output_file, "w", encoding="utf-8") as f:
-        for thread in comments["data"]["threads"]:
-            for comment in thread["comments"]:
-                time = comment["vposMs"] / 1000  # 秒単位に変換
-                body = comment["body"]
-                f.write(f"{time} {body}\n")
+        for thread in comments.get("data", {}).get("threads", []):
+            for comment in thread.get("comments", []):
+                try:
+                    time = float(comment.get("vposMs", 0)) / 1000  # 秒単位に変換
+                    body = comment.get("body", "").replace("\n", " ")  # 改行を除去
+                    if body:  # コメントが空でない場合のみ保存
+                        f.write(f"{time} {body}\n")
+                except (ValueError, TypeError):
+                    # vposMs が無効な値の場合はスキップ
+                    continue
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
