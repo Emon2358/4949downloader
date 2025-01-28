@@ -30,20 +30,26 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip curl ffmpeg jq unzip chromium-browser
+          sudo apt-get install -y python3 python3-pip curl jq unzip chromium-browser
 
           # Pythonライブラリをインストール
           pip3 install selenium requests
 
-          # Chromedriverをダウンロードしてセットアップ
-          curl -sSL https://chromedriver.storage.googleapis.com/$(curl -sSL https://chromedriver.storage.googleapis.com/LATEST_RELEASE)/chromedriver_linux64.zip -o chromedriver.zip
+      - name: Install ChromeDriver
+        run: |
+          # Chrome のバージョンを取得
+          CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
+          echo "Detected Chrome version: $CHROME_VERSION"
+
+          # ChromeDriver の最新バージョンを取得
+          CHROMEDRIVER_VERSION=$(curl -sS "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
+          echo "Installing ChromeDriver version: $CHROMEDRIVER_VERSION"
+
+          # ChromeDriver をダウンロードしてセットアップ
+          curl -sSL "https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip" -o chromedriver.zip
           unzip chromedriver.zip
           sudo mv chromedriver /usr/local/bin/
           sudo chmod +x /usr/local/bin/chromedriver
-
-          # yt-dlp をインストール
-          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-          sudo chmod a+rx /usr/local/bin/yt-dlp
 
       - name: Run Selenium Login Script
         run: |
