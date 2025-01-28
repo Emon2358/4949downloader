@@ -1,75 +1,54 @@
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 import sys
-import time
+import requests
+from bs4 import BeautifulSoup
 
-# コマンドライン引数からメールアドレスとパスワードを取得
-EMAIL = sys.argv[1]
-PASSWORD = sys.argv[2]
+# コマンドライン引数から情報を取得
+EMAIL = sys.argv[1]  # ニコニコのメールアドレス
+PASSWORD = sys.argv[2]  # ニコニコのパスワード
 
-# Chromeオプション（ヘッドレスモードで実行）
-options = webdriver.ChromeOptions()
-options.add_argument('--headless')
-options.add_argument('--no-sandbox')
-options.add_argument('--disable-dev-shm-usage')
-
-# ブラウザを初期化
-driver = webdriver.Chrome(options=options)
-driver.maximize_window()
+# セッションを作成
+session = requests.Session()
 
 try:
-    # ニコニコ動画のログインページにアクセス
-    driver.get("https://account.nicovideo.jp/login")
+    # ログインページへアクセスして CSRF トークンを取得
+    login_page = session.get("https://account.nicovideo.jp/login")
+    soup = BeautifulSoup(login_page.text, 'html.parser')
+    csrf_token = soup.find("input", {"name": "csrf_token"}).get("value")
 
-    # メールアドレスを入力
-    email_input = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.ID, "input__mailtel"))
-    )
-    email_input.send_keys(EMAIL)
+    # ログインリクエストを送信
+    login_data = {
+        "mail_tel": EMAIL,
+        "password": PASSWORD,
+        "csrf_token": csrf_token
+    }
+    response = session.post("https://account.nicovideo.jp/api/v1/login", data=login_data)
 
-    # パスワードを入力
-    password_input = driver.find_element(By.ID, "input__password")
-    password_input.send_keys(PASSWORD)
-
-    # ログインボタンをクリック
-    login_button = driver.find_element(By.ID, "login__submit")
-    login_button.click()
-
-    # ログイン成功を待機
-    WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.CLASS_NAME, "MainContainer"))
-    )
-    print("ログイン成功")
-
-    # R-18設定ページに移動
-    driver.get("https://www.nicovideo.jp/my/settings")
-
-    # R-18コンテンツの有効化
-    r18_checkbox = WebDriverWait(driver, 10).until(
-        EC.presence_of_element_located((By.ID, "r18-checkbox"))  # 正確なIDを確認してください
-    )
-    if not r18_checkbox.is_selected():
-        r18_checkbox.click()
-        print("R-18コンテンツを有効化しました")
+    if response.status_code == 200 and "ログインに成功しました" in response.text:
+        print("ログイン成功")
     else:
-        print("R-18コンテンツは既に有効です")
+        raise Exception("ログイン失敗")
 
-    # 設定を保存
-    save_button = driver.find_element(By.ID, "save-settings")
-    save_button.click()
-    print("設定を保存しました")
+    # R-18 設定ページにアクセス
+    settings_page = session.get("https://www.nicovideo.jp/my/settings")
+    soup = BeautifulSoup(settings_page.text, 'html.parser')
 
-    # クッキーを保存
-    with open("cookies.txt", "w") as f:
-        for cookie in driver.get_cookies():
-            f.write(f"{cookie['name']}={cookie['value']}; ")
+    # R-18 の設定が無効の場合、有効にするリクエストを送信
+    r18_checkbox = soup.find("input", {"id": "r18-checkbox"})
+    if r18_checkbox and not r18_checkbox.has_attr("checked"):
+        r18_data = {
+            "r18_enabled": "true",
+            "csrf_token": csrf_token
+        }
+        save_response = session.post("https://www.nicovideo.jp/my/settings", data=r18_data)
+        if save_response.status_code == 200:
+            print("R-18 コンテンツを有効化しました")
+        else:
+            raise Exception("R-18 設定の保存に失敗しました")
+    else:
+        print("R-18 コンテンツは既に有効です")
+
+    # 完了メッセージ
+    print("操作が完了しました")
 
 except Exception as e:
     print(f"エラーが発生しました: {e}")
-
-finally:
-    # ブラウザを閉じる
-    time.sleep(5)
-    driver.quit()
