@@ -30,19 +30,12 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip curl jq unzip chromium-browser chromium-chromedriver
+          sudo apt-get install -y python3 python3-pip curl jq
 
           # Pythonライブラリをインストール
-          pip3 install selenium requests
+          pip3 install requests beautifulsoup4
 
-      - name: Verify Chrome and ChromeDriver Versions
-        run: |
-          echo "Google Chrome Version:"
-          google-chrome --version
-          echo "ChromeDriver Version:"
-          chromedriver --version
-
-      - name: Run Selenium Login Script
+      - name: Run Login Script
         run: |
           python3 login.py "${{ github.event.inputs.email }}" "${{ github.event.inputs.password }}"
 
