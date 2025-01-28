@@ -17,16 +17,25 @@ jobs:
 
       - name: Install Dependencies
         run: |
+          # 必要なツールをインストール
           sudo apt-get update
           sudo apt-get install -y curl ffmpeg fonts-migmix jq
+          
+          # yt-dlp をインストール
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
-          deno upgrade --version 1.37.0
+          
+          # Deno をインストール
+          curl -fsSL https://deno.land/x/install/install.sh | sh
+          echo "export PATH=$HOME/.deno/bin:\$PATH" >> $GITHUB_ENV
 
       - name: Fetch Comments
         run: |
+          # GitHub Actions の inputs から動画IDを取得
           video_id="${{ github.event.inputs.video_id }}"
           mkdir -p downloads
+
+          # Deno を使ってコメントを取得
           deno run --allow-net --allow-read --allow-write scripts/fetchComments.ts "$video_id" > "downloads/${video_id}_comments.txt"
 
       - name: Download Video
