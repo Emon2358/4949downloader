@@ -3,13 +3,6 @@ name: shikushiku downloader
 on:
   workflow_dispatch:
     inputs:
-      email:
-        description: "NicoNico Gmail Address"
-        required: true
-      password:
-        description: "NicoNico Account Password"
-        required: true
-        type: password
       video_id:
         description: "NicoNico Video ID (e.g., sm9)"
         required: true
@@ -22,36 +15,32 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      - name: Set Up Git Identity
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
       - name: Install Dependencies
         run: |
+          # 必要なツールをインストール
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip curl jq
+          sudo apt-get install -y python3 python3-pip curl ffmpeg jq
 
-          # Playwrightと依存関係をインストール
-          pip3 install playwright
-          python3 -m playwright install
+          # Pythonライブラリをインストール
+          pip3 install requests
 
-          # yt-dlpのインストール
-          sudo apt-get install -y yt-dlp
-
-      - name: Run Login Script
-        run: |
-          python3 login.py "${{ github.event.inputs.email }}" "${{ github.event.inputs.password }}"
+          # yt-dlp をインストール
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
 
       - name: Download Video
         run: |
           video_id="${{ github.event.inputs.video_id }}"
           mkdir -p downloads
-          yt-dlp --cookies cookies.txt "https://www.nicovideo.jp/watch/${video_id}" -o "downloads/${video_id}.mp4"
+          yt-dlp "https://www.nicovideo.jp/watch/${video_id}" --cookies cookies.txt -o "downloads/${video_id}.mp4"
 
       - name: Upload Video to Repository
         run: |
           video_id="${{ github.event.inputs.video_id }}"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # ダウンロードした動画をコミットしてプッシュ
           git add "downloads/${video_id}.mp4"
           git commit -m "Add downloaded video: ${video_id}"
           git push
