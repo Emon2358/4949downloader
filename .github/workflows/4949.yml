@@ -23,33 +23,28 @@ jobs:
 
       - name: Retrieve cookies
         run: |
-          # Replace this with the actual command to retrieve cookies
-          # For example, using curl to get cookies from a website
           curl -c cookies.txt https://www.nicovideo.jp/
 
       - name: Download NicoNico Video
         id: download
         run: |
+          mkdir -p downloads
           video_id="${{ github.event.inputs.video_id }}"
           yt-dlp "https://www.nicovideo.jp/watch/${video_id}" --cookies cookies.txt -o "downloads/%(title)s.%(ext)s"
 
-      - name: Generate or Update README.md
-        if: success()
+      - name: Add success message to README.md
         run: |
-          # Check if README.md exists
           if [ ! -f README.md ]; then
             echo "# NicoNico Video Downloads" > README.md
             echo "このリポジトリにはニコニコ動画からダウンロードした動画が含まれます。" >> README.md
             echo "" >> README.md
           fi
-          # Add success message
           echo "✅ 成功したじょ〜☆彡: ${{ github.event.inputs.video_id }}" >> README.md
 
       - name: Commit changes
-        if: success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add README.md
-          git commit -m "Add success message for ${{ github.event.inputs.video_id }}"
+          git add README.md downloads/
+          git commit -m "Add success message and video for ${{ github.event.inputs.video_id }}"
           git push
