@@ -1,10 +1,10 @@
-name: shikushiku downloader
+name: Video Downloader
 
 on:
   workflow_dispatch:
     inputs:
-      video_id:
-        description: "NicoNico Video ID (e.g., sm9)"
+      video_url:
+        description: "Video URL (e.g., https://www.example.com/video/12345)"
         required: true
 
 jobs:
@@ -30,17 +30,18 @@ jobs:
 
       - name: Download Video
         run: |
-          video_id="${{ github.event.inputs.video_id }}"
+          video_url="${{ github.event.inputs.video_url }}"
           mkdir -p downloads
-          yt-dlp "https://www.nicovideo.jp/watch/${video_id}" --cookies cookies.txt -o "downloads/${video_id}.mp4"
+          yt-dlp "${video_url}" --cookies cookies.txt -o "downloads/%(id)s.%(ext)s"
 
       - name: Upload Video to Repository
         run: |
-          video_id="${{ github.event.inputs.video_id }}"
+          video_url="${{ github.event.inputs.video_url }}"
+          video_id=$(basename "${video_url}")
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
           # ダウンロードした動画をコミットしてプッシュ
-          git add "downloads/${video_id}.mp4"
+          git add "downloads/${video_id}.*"
           git commit -m "Add downloaded video: ${video_id}"
           git push
