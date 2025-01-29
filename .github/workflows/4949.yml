@@ -1,4 +1,4 @@
-name: shikushiku Downloader
+name: Universal Video Downloader
 
 on:
   workflow_dispatch:
@@ -51,6 +51,7 @@ jobs:
               --ignore-errors \
               --no-overwrites \
               --add-metadata \
+              --extractor-args "youtubetab:skip=webpage" \
               --extractor-args "youtube:player_skip=webpage,configs;visitor_data=${VISITOR_DATA}" \
               --cookies cookies.txt \
               -f "best[ext=mp4]/best" \
