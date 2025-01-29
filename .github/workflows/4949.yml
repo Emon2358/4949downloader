@@ -1,77 +1,46 @@
-name: shikushiku Downloader
+name: shikushiku downloader
 
 on:
   workflow_dispatch:
     inputs:
-      video_url:
-        description: "Video URL to download"
+      video_id:
+        description: "NicoNico Video ID (e.g., sm9)"
         required: true
-      visitor_data:
-        description: "Visitor data for specific platforms (optional)"
-        required: false
 
 jobs:
-  download_video:
+  fetch_and_download:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: '3.x'
 
       - name: Install Dependencies
         run: |
+          # 必要なツールをインストール
           sudo apt-get update
-          sudo apt-get install -y ffmpeg curl
-          pip install yt-dlp requests
+          sudo apt-get install -y python3 python3-pip curl ffmpeg jq
 
-      - name: Fetch Cookies
-        run: |
-          # Fetch cookies from the platform if necessary
-          curl -c cookies.txt -L "https://www.example.com" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+          # Pythonライブラリをインストール
+          pip3 install requests
+
+          # yt-dlp をインストール
+          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+          sudo chmod a+rx /usr/local/bin/yt-dlp
 
       - name: Download Video
-        env:
-          VIDEO_URL: ${{ github.event.inputs.video_url }}
-          VISITOR_DATA: ${{ github.event.inputs.visitor_data }}
         run: |
+          video_id="${{ github.event.inputs.video_id }}"
           mkdir -p downloads
-          
-          # Download video from the provided URL
-          yt-dlp "$VIDEO_URL" \
-            --no-warnings \
-            --ignore-errors \
-            --no-overwrites \
-            --add-metadata \
-            --cookies cookies.txt \
-            -f "best[ext=mp4]/best" \
-            -o "downloads/%(title)s-%(id)s.%(ext)s" \
-            ${VISITOR_DATA:+--extractor-args "visitor_data=${VISITOR_DATA}"}
+          yt-dlp "https://www.nicovideo.jp/watch/${video_id}" --cookies cookies.txt -o "downloads/${video_id}.mp4"
 
-      - name: List Downloaded Files
+      - name: Upload Video to Repository
         run: |
-          echo "Downloaded files:"
-          ls -l downloads/
-          echo "File details:"
-          file downloads/*
+          video_id="${{ github.event.inputs.video_id }}"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Commit and Push
-        run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add downloads/
-          git commit -m "Download video from ${{ github.event.inputs.video_url }}" || exit 0
+          # ダウンロードした動画をコミットしてプッシュ
+          git add "downloads/${video_id}.mp4"
+          git commit -m "Add downloaded video: ${video_id}"
           git push
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: downloaded-video
-          path: downloads/
-          retention-days: 5
