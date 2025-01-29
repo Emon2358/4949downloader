@@ -43,31 +43,16 @@ jobs:
         run: |
           mkdir -p downloads
           
-          # Check if the URL is from YouTube
-          if [[ "$VIDEO_URL" == *"youtube.com"* || "$VIDEO_URL" == *"youtu.be"* ]]; then
-            # Download video from YouTube, skipping webpage request
-            yt-dlp "$VIDEO_URL" \
-              --no-warnings \
-              --ignore-errors \
-              --no-overwrites \
-              --add-metadata \
-              --extractor-args "youtubetab:skip=webpage" \
-              --extractor-args "youtube:player_skip=webpage,configs;visitor_data=${VISITOR_DATA}" \
-              --cookies cookies.txt \
-              -f "best[ext=mp4]/best" \
-              -o "downloads/%(title)s-%(id)s.%(ext)s"
-          else
-            # Download video from other platforms
-            yt-dlp "$VIDEO_URL" \
-              --no-warnings \
-              --ignore-errors \
-              --no-overwrites \
-              --add-metadata \
-              --cookies cookies.txt \
-              -f "best[ext=mp4]/best" \
-              -o "downloads/%(title)s-%(id)s.%(ext)s" \
-              ${VISITOR_DATA:+--extractor-args "visitor_data=${VISITOR_DATA}"}
-          fi
+          # Download video from the provided URL
+          yt-dlp "$VIDEO_URL" \
+            --no-warnings \
+            --ignore-errors \
+            --no-overwrites \
+            --add-metadata \
+            --cookies cookies.txt \
+            -f "best[ext=mp4]/best" \
+            -o "downloads/%(title)s-%(id)s.%(ext)s" \
+            ${VISITOR_DATA:+--extractor-args "visitor_data=${VISITOR_DATA}"}
 
       - name: List Downloaded Files
         run: |
