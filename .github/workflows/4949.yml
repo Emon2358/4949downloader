@@ -1,4 +1,4 @@
-name: Video Downloader
+name: shikushiku Downloader
 
 on:
   workflow_dispatch:
