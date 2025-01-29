@@ -4,49 +4,73 @@ on:
   workflow_dispatch:
     inputs:
       video_url:
-        description: "Video URL (e.g., https://www.example.com/video/12345)"
+        description: "Video URL to download"
         required: true
 
 jobs:
-  fetch_and_download:
+  download_video:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: '3.x'
 
       - name: Install Dependencies
         run: |
-          # Install necessary tools
           sudo apt-get update
-          sudo apt-get install -y python3 python3-pip curl ffmpeg jq
-
-          # Install Python libraries
-          pip3 install requests
-
-          # Install yt-dlp
-          sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
-          sudo chmod a+rx /usr/local/bin/yt-dlp
-
-      - name: Fetch Cookies
-        run: |
-          # Fetch cookies from YouTube
-          curl -c cookies.txt -L "https://www.youtube.com" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+          sudo apt-get install -y ffmpeg
+          pip install yt-dlp requests
 
       - name: Download Video
+        env:
+          VIDEO_URL: ${{ github.event.inputs.video_url }}
         run: |
-          video_url="${{ github.event.inputs.video_url }}"
           mkdir -p downloads
-          yt-dlp "${video_url}" --cookies cookies.txt -o "downloads/%(id)s.%(ext)s"
+          
+          # Advanced download with multiple fallback options
+          yt-dlp "$VIDEO_URL" \
+            --no-warnings \
+            --ignore-errors \
+            --no-overwrites \
+            --add-metadata \
+            -f "best[ext=mp4]/best" \
+            -o "downloads/%(title)s-%(id)s.%(ext)s"
 
-      - name: Upload Video to Repository
+      - name: List Downloaded Files
         run: |
-          video_url="${{ github.event.inputs.video_url }}"
-          video_id=$(basename "${video_url}")
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          echo "Downloaded files:"
+          ls -l downloads/
+          echo "File details:"
+          file downloads/*
 
-          # Commit and push the downloaded video
-          git add "downloads/${video_id}.*"
-          git commit -m "Add downloaded video: ${video_id}"
+      - name: Check File Size
+        run: |
+          total_size=$(du -sh downloads | cut -f1)
+          echo "Total download size: $total_size"
+          
+          # Optional: Limit file size
+          if [[ $(find downloads -type f -size +1G | wc -l) -gt 0 ]]; then
+            echo "Warning: Large files detected"
+          fi
+
+      - name: Commit and Push
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add downloads/
+          git commit -m "Download video from ${{ github.event.inputs.video_url }}" || exit 0
           git push
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: downloaded-video
+          path: downloads/
+          retention-days: 5
