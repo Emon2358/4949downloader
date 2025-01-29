@@ -6,6 +6,9 @@ on:
       video_url:
         description: "Video URL to download"
         required: true
+      visitor_data:
+        description: "Visitor data for specific platforms (optional)"
+        required: false
 
 jobs:
   download_video:
@@ -25,23 +28,31 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg
+          sudo apt-get install -y ffmpeg curl
           pip install yt-dlp requests
+
+      - name: Fetch Cookies
+        run: |
+          # Fetch cookies from the platform if necessary
+          curl -c cookies.txt -L "https://www.example.com" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
       - name: Download Video
         env:
           VIDEO_URL: ${{ github.event.inputs.video_url }}
+          VISITOR_DATA: ${{ github.event.inputs.visitor_data }}
         run: |
           mkdir -p downloads
           
-          # Advanced download with multiple fallback options
+          # Download video from the provided URL
           yt-dlp "$VIDEO_URL" \
             --no-warnings \
             --ignore-errors \
             --no-overwrites \
             --add-metadata \
+            --cookies cookies.txt \
             -f "best[ext=mp4]/best" \
-            -o "downloads/%(title)s-%(id)s.%(ext)s"
+            -o "downloads/%(title)s-%(id)s.%(ext)s" \
+            ${VISITOR_DATA:+--extractor-args "visitor_data=${VISITOR_DATA}"}
 
       - name: List Downloaded Files
         run: |
@@ -49,16 +60,6 @@ jobs:
           ls -l downloads/
           echo "File details:"
           file downloads/*
-
-      - name: Check File Size
-        run: |
-          total_size=$(du -sh downloads | cut -f1)
-          echo "Total download size: $total_size"
-          
-          # Optional: Limit file size
-          if [[ $(find downloads -type f -size +1G | wc -l) -gt 0 ]]; then
-            echo "Warning: Large files detected"
-          fi
 
       - name: Commit and Push
         run: |
