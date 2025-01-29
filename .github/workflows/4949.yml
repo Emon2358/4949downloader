@@ -28,6 +28,11 @@ jobs:
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
 
+      - name: Fetch Cookies
+        run: |
+          # Cookieを取得してcookie.txtに保存
+          curl -c cookies.txt -L "${{ github.event.inputs.video_url }}"
+
       - name: Download Video
         run: |
           video_url="${{ github.event.inputs.video_url }}"
