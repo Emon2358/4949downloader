@@ -17,21 +17,21 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          # 必要なツールをインストール
+          # Install necessary tools
           sudo apt-get update
           sudo apt-get install -y python3 python3-pip curl ffmpeg jq
 
-          # Pythonライブラリをインストール
+          # Install Python libraries
           pip3 install requests
 
-          # yt-dlp をインストール
+          # Install yt-dlp
           sudo curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
           sudo chmod a+rx /usr/local/bin/yt-dlp
 
       - name: Fetch Cookies
         run: |
-          # Cookieを取得してcookie.txtに保存
-          curl -c cookies.txt -L "${{ github.event.inputs.video_url }}"
+          # Fetch cookies from YouTube
+          curl -c cookies.txt -L "https://www.youtube.com" --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
 
       - name: Download Video
         run: |
@@ -46,7 +46,7 @@ jobs:
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # ダウンロードした動画をコミットしてプッシュ
+          # Commit and push the downloaded video
           git add "downloads/${video_id}.*"
           git commit -m "Add downloaded video: ${video_id}"
           git push
